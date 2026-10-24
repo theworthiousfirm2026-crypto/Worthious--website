@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Worthious Firm | Fresh Vegetables</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f7faf5;
+            color: #263526;
+        }
+
+        header {
+            background: #176b39;
+            color: white;
+            padding: 24px 15px;
+            text-align: center;
+        }
+
+        header h1 {
+            margin: 0 0 10px;
+        }
+
+        header p {
+            margin: 0;
+        }
+
+        nav {
+            background: #104d29;
+            padding: 12px;
+            text-align: center;
+        }
+
+        nav a {
+            color: white;
+            text-decoration: none;
+            margin: 0 12px;
+            font-weight: bold;
+        }
+
+        .intro {
+            text-align: center;
+            padding: 30px 15px;
+        }
+
+        .intro h2 {
+            color: #176b39;
+        }
+
+        .products {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            padding: 20px;
+            max-width: 1100px;
+            margin: auto;
+        }
+
+        .product {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px #00000012;
+        }
+
+        .product .picture {
+            font-size: 65px;
+            padding: 15px;
+        }
+
+        .product h3 {
+            margin: 10px 0;
+        }
+
+        .price {
+            color: #176b39;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        button {
+            background: #176b39;
+            color: white;
+            border: none;
+            padding: 12px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 15px;
+        }
+
+        button:hover {
+            background: #104d29;
+        }
+
+        .cart {
+            background: white;
+            padding: 20px;
+            margin: 20px auto;
+            max-width: 700px;
+            border-radius: 10px;
+        }
+
+        footer {
+            background: #104d29;
+            color: white;
+            text-align: center;
+            padding: 22px 10px;
+            margin-top: 30px;
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>The Worthious Firm</h1>
+    <p>Fresh Vegetables, Ready to Cook</p>
+</header>
+
+<nav>
+    <a href="#home">Home</a>
+    <a href="#products">Products</a>
+    <a href="#cart">My Cart (<span id="cart-count">0</span>)</a>
+</nav>
+
+<section class="intro" id="home">
+    <h2>Fresh Vegetables for Your Kitchen</h2>
+    <p>Clean, fresh and ready-to-cook vegetables delivered to your home.</p>
+</section>
+
+<section class="products" id="products">
+
+    <div class="product">
+        <div class="picture">🥔</div>
+        <h3>Raw Potato Fries</h3>
+        <p>Fresh-cut potatoes, ready to cook.</p>
+        <p class="price">₹100 / pack</p>
+        <button onclick="addToCart('Raw Potato Fries', 100)">
+            Add to Cart
+        </button>
+    </div>
+
+    <div class="product">
+        <div class="picture">🌽</div>
+        <h3>Sweet Corn</h3>
+        <p>Fresh sweet corn, ready to cook.</p>
+        <p class="price">₹80 / pack</p>
+        <button onclick="addToCart('Sweet Corn', 80)">
+            Add to Cart
+        </button>
+    </div>
+
+    <div class="product">
+        <div class="picture">🥕</div>
+        <h3>Pulao / Biryani Vegetables</h3>
+        <p>A convenient mix of fresh-cut vegetables.</p>
+        <p class="price">₹120 / pack</p>
+        <button onclick="addToCart('Pulao / Biryani Vegetables', 120)">
+            Add to Cart
+        </button>
+    </div>
+
+</section>
+
+<section class="cart" id="cart">
+    <h2>My Shopping Cart</h2>
+    <div id="cart-items">
+        Your cart is empty.
+    </div>
+    <h3>Total: ₹<span id="total">0</span></h3>
+    <button onclick="clearCart()">Clear Cart</button>
+</section>
+
+<footer>
+    <h3>The Worthious Firm</h3>
+    <p>Fresh Vegetables, Ready to Cook</p>
+    <p>Contact: 9711640390</p>
+    <p>Email: theworthiousfirm2026@gmail.com</p>
+</footer>
+
+<script>
+    let cart = [];
+
+    function addToCart(name, price) {
+        const item = cart.find(product => product.name === name);
+
+        if (item) {
+            item.quantity++;
+        } else {
+            cart.push({
+                name: name,
+                price: price,
+                quantity: 1
+            });
+        }
+
+        updateCart();
+    }
+
+    function updateCart() {
+        const cartItems = document.getElementById('cart-items');
+        const cartCount = document.getElementById('cart-count');
+        const totalElement = document.getElementById('total');
+
+        let total = 0;
+        let count = 0;
+
+        if (cart.length === 0) {
+            cartItems.textContent = 'Your cart is empty.';
+        } else {
+            cartItems.innerHTML = '';
+
+            cart.forEach((item, index) => {
+                total += item.price * item.quantity;
+                count += item.quantity;
+
+                const row = document.createElement('p');
+
+                row.textContent =
+                    item.name + ' - ₹' + item.price +
+                    ' × ' + item.quantity + ' ';
+
+                const removeButton = document.createElement('button');
+                removeButton.textContent = 'Remove';
+
+                removeButton.onclick = function () {
+                    cart.splice(index, 1);
+                    updateCart();
+                };
+
+                row.appendChild(removeButton);
+                cartItems.appendChild(row);
+            });
+        }
+
+        cartCount.textContent = count;
+        totalElement.textContent = total;
+    }
+
+    function clearCart() {
+        cart = [];
+        updateCart();
+    }
+</script>
+
+</body>
+</html>
