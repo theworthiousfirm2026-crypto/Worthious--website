@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Worthious Firm | Admin Panel</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #f4f7f4;
+      color: #24352b;
+    }
+
+    .container {
+      max-width: 850px;
+      margin: auto;
+    }
+
+    .card {
+      background: white;
+      padding: 22px;
+      margin-bottom: 20px;
+      border-radius: 12px;
+      box-shadow: 0 3px 12px #00000010;
+    }
+
+    h1, h2 { color: #176b3a; }
+
+    input, textarea, button {
+      width: 100%;
+      padding: 12px;
+      margin: 7px 0;
+      font-size: 16px;
+      border-radius: 6px;
+    }
+
+    input, textarea {
+      border: 1px solid #ccd5ce;
+    }
+
+    button {
+      border: none;
+      color: white;
+      background: #176b3a;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    .secondary { background: #52665a; }
+    .delete { background: #b42318; }
+
+    .product {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      border-bottom: 1px solid #e1e6e2;
+      padding: 14px 0;
+    }
+
+    .product img {
+      width: 85px;
+      height: 85px;
+      object-fit: contain;
+      border: 1px solid #eee;
+      border-radius: 8px;
+    }
+
+    .product-info { flex: 1; min-width: 0; }
+    .product-info p { overflow-wrap: anywhere; }
+    .product button { margin-top: 5px; }
+
+    .hidden { display: none; }
+    #message { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+    @media (max-width: 500px) {
+      body { padding: 10px; }
+      .card { padding: 15px; }
+      .product { align-items: flex-start; }
+      .product img { width: 65px; height: 65px; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="container">
+
+  <div class="card">
+    <h1>The Worthious Firm</h1>
+    <h2>Product Admin Panel</h2>
+    <p>Manage your products, prices, photos and availability.</p>
+    <p id="message" role="status">Connecting...</p>
+  </div>
+
+  <section id="loginCard" class="card hidden">
+    <h2>Admin Login</h2>
+    <form id="loginForm">
+      <label>Email address</label>
+      <input id="email" type="email" required
+        autocomplete="username"
+        placeholder="Admin email">
+
+      <label>Password</label>
+      <input id="password" type="password" required
+        autocomplete="current-password"
+        placeholder="Admin password">
+
+      <button type="submit">Login</button>
+    </form>
+  </section>
+
+  <section id="dashboard" class="hidden">
+
+    <div class="card">
+      <h2 id="formTitle">Add New Product</h2>
+
+      <form id="productForm">
+        <input id="productId" type="hidden">
+
+        <label>Product Name *</label>
+        <input id="name" required maxlength="150"
+          placeholder="Example: Fresh Potato Fries">
+
+        <label>Product Description</label>
+        <textarea id="description" rows="3" maxlength="2000"
+          placeholder="Product details"></textarea>
+
+        <label>Price (INR) *</label>
+        <input id="price" type="number" min="0" step="0.01"
+          required placeholder="Enter price">
+
+        <label>Product Photo</label>
+        <input id="image" type="file"
+          accept="image/jpeg,image/png,image/webp">
+
+        <p id="currentImage"></p>
+
+        <label>
+          <input id="available" type="checkbox" checked
+            style="width:auto;margin-right:8px">
+          Product available
+        </label>
+
+        <button id="saveButton" type="submit">Save Product</button>
+        <button id="cancelButton" type="button"
+          class="secondary hidden">Cancel Edit</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Your Products</h2>
+      <button id="refreshButton" type="button"
+        class="secondary">Refresh Products</button>
+      <div id="productList"></div>
+    </div>
+
+    <div class="card">
+      <button id="logoutButton" type="button"
+        class="secondary">Logout</button>
+    </div>
+
+  </section>
+</div>
+
+<script>
+  // Replace these two values with your own Supabase details.
+  const SUPABASE_URL = https://kzzvlxhsicjskzberzfv.supabase.co/rest/v1/
+  const SUPABASE_PUBLISHABLE_KEY = sb_publishable_EwEe99IanC1tQrmRlqavag_Cc4XEw7h
+
+  const ADMIN_EMAIL = "theworthiousfirm2026@gmail.com";
+  const BUCKET = "product-images";
+
+  const message = document.getElementById("message");
+  const loginCard = document.getElementById("loginCard");
+  const dashboard = document.getElementById("dashboard");
+  const productForm = document.getElementById("productForm");
+
+  let db;
+  let currentSession = null;
+  let currentImageUrl = "";
+
+  function showMessage(text) {
+    message.textContent = text;
+  }
+
+  function showLogin() {
+    loginCard.classList.remove("hidden");
+    dashboard.classList.add("hidden");
+  }
+
+  function showDashboard() {
+    loginCard.classList.add("hidden");
+    dashboard.classList.remove("hidden");
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[char]);
+  }
+
+  async function checkAdmin(session) {
+    if (!session || !session.user ||
+        (session.user.email || "").toLowerCase() !== ADMIN_EMAIL) {
+      currentSession = null;
+      showLogin();
+      showMessage("Please log in with the authorized admin email.");
+      return false;
+    }
+
+    currentSession = session;
+    showDashboard();
+    showMessage("Admin login successful.");
+    await loadProducts();
+    return true;
+  }
+
+  async function startApp() {
+    if (
+      SUPABASE_URL.includes("YOUR_SUPABASE") ||
+      SUPABASE_PUBLISHABLE_KEY.includes("YOUR_SUPABASE")
+    ) {
+      showMessage("Setup needed: add your Supabase URL and Publishable Key in the code.");
+      return;
+    }
+
+    db = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY
+    );
+
+    const { data, error } = await db.auth.getSession();
+
+    if (error) {
+      showMessage("Could not check login: " + error.message);
+      showLogin();
+      return;
+    }
+
+    if (data.session) {
+      await checkAdmin(data.session);
+    } else {
+      showMessage("Please log in to manage products.");
+      showLogin();
+    }
+
+    db.auth.onAuthStateChange((event, session) => {
+      setTimeout(async () => {
+        if (session) {
+          await checkAdmin(session);
+        } else {
+          currentSession = null;
+          showLogin();
+          dashboard.classList.add("hidden");
+        }
+      }, 0);
+    });
+  }
+
+  document.getElementById("loginForm").addEventListener("submit",
+    async event => {
+      event.preventDefault();
+
+      if (!db) return;
+
+      showMessage("Logging in...");
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+
+      const { data, error } = await db.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        showMessage("Login failed: " + error.message);
+        return;
+      }
+
+      if (!data.session ||
+          (data.user.email || "").toLowerCase() !== ADMIN_EMAIL) {
+        await db.auth.signOut();
+        showMessage("This account is not authorized as admin.");
+        return;
+      }
+
+      document.getElementById("password").value = "";
+      await checkAdmin(data.session);
+    }
+  );
+
+  async function loadProducts() {
+    if (!currentSession) return;
+
+    const list = document.getElementById("productList");
+    list.textContent = "Loading products...";
+
+    const { data, error } = await db
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      list.textContent = "Could not load products: " + error.message;
+      return;
+    }
+
+    list.replaceChildren();
+
+    if (!data || data.length === 0) {
+      list.textContent = "No products added yet.";
+      return;
+    }
+
+    data.forEach(product => {
+      const row = document.createElement("div");
+      row.className = "product";
+
+      if (product.image_url) {
+        const img = document.createElement("img");
+        img.src = product.image_url;
+        img.alt = product.name || "Product";
+        img.loading = "lazy";
+        row.appendChild(img);
+      }
+
+      const info = document.createElement("div");
+      info.className = "product-info";
+
+      const title = document.createElement("strong");
+      title.textContent = product.name;
+
+      const price = document.createElement("p");
+      price.textContent = "₹" + Number(product.price).toFixed(2);
+
+      const status = document.createElement("p");
+      status.textContent = product.available
+        ? "Available"
+        : "Unavailable";
+
+      info.append(title, price, status);
+
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.textContent = "Edit";
+      editButton.addEventListener("click", () => editProduct(product));
+
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.textContent = "Delete";
+      deleteButton.className = "delete";
+      deleteButton.addEventListener("click", () => deleteProduct(product));
+
+      info.append(editButton, deleteButton);
+      row.appendChild(info);
+      list.appendChild(row);
+    });
+  }
+
+  function editProduct(product) {
+    document.getElementById("productId").value = product.id;
+    document.getElementById("name").value = product.name || "";
+    document.getElementById("description").value =
+      product.description || "";
+    document.getElementById("price").value = product.price;
+    document.getElementById("available").checked = !!product.available;
+
+    currentImageUrl = product.image_url || "";
+    document.getElementById("image").value = "";
+
+    document.getElementById("currentImage").textContent =
+      currentImageUrl ? "Current photo is saved. Choose a new file to replace it." : "No photo saved.";
+
+    document.getElementById("formTitle").textContent = "Edit Product";
+    document.getElementById("saveButton").textContent = "Update Product";
+    document.getElementById("cancelButton").classList.remove("hidden");
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function resetForm() {
+    productForm.reset();
+    document.getElementById("productId").value = "";
+    document.getElementById("available").checked = true;
+    document.getElementById("image").value = "";
+    document.getElementById("currentImage").textContent = "";
+
+    currentImageUrl = "";
+    document.getElementById("formTitle").textContent = "Add New Product";
+    document.getElementById("saveButton").textContent = "Save Product";
+    document.getElementById("cancelButton").classList.add("hidden");
+  }
+
+  document.getElementById("cancelButton").addEventListener("click", resetForm);
+
+  productForm.addEventListener("submit", async event => {
+    event.preventDefault();
+
+    if (!currentSession) {
+      showMessage("Please log in again.");
+      return;
+    }
+
+    const saveButton = document.getElementById("saveButton");
+    saveButton.disabled = true;
+
+    try {
+      const id = document.getElementById("productId").value;
+      const name = document.getElementById("name").value.trim();
+      const description =
+        document.getElementById("description").value.trim();
+      const price = Number(document.getElementById("price").value);
+      const available = document.getElementById("available").checked;
+      const file = document.getElementById("image").files[0];
+
+      if (!name || !Number.isFinite(price) || price < 0) {
+        showMessage("Enter a product name and a valid price.");
+        return;
+      }
+
+      let imageUrl = currentImageUrl;
+
+      if (file) {
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+          showMessage("Please choose a JPG, PNG or WebP image.");
+          return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+          showMessage("Image must be 5 MB or smaller.");
+          return;
+        }
+
+        const extension = ({
+          "image/jpeg": "jpg",
+          "image/png": "png",
+          "image/webp": "webp"
+        })[file.type];
+
+        const path = Date.now() + "-" +
+          crypto.randomUUID() + "." + extension;
+
+        showMessage("Uploading product photo...");
+
+        const { error: uploadError } = await db.storage
+          .from(BUCKET)
+          .upload(path, file, {
+            contentType: file.type,
+            upsert: false
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicData } = db.storage
+          .from(BUCKET)
+          .getPublicUrl(path);
+
+        imageUrl = publicData.publicUrl;
+      }
+
+      const product = {
+        name,
+        description,
+        price,
+        image_url: imageUrl,
+        available
+      };
+
+      let result;
+
+      if (id) {
+        result = await db.from("products").update(product).eq("id", id);
+      } else {
+        result = await db.from("products").insert(product);
+      }
+
+      if (result.error) throw result.error;
+
+      showMessage(id ? "Product updated successfully." : "Product added successfully.");
+      resetForm();
+      await loadProducts();
+
+    } catch (error) {
+      showMessage("Save failed: " + error.message);
+    } finally {
+      saveButton.disabled = false;
+    }
+  });
+
+  async function deleteProduct(product) {
+    if (!currentSession) return;
+
+    if (!confirm('Delete "' + product.name + '"?')) return;
+
+    const { error } = await db
+      .from("products")
+      .delete()
+      .eq("id", product.id);
+
+    if (error) {
+      showMessage("Delete failed: " + error.message);
+      return;
+    }
+
+    showMessage("Product deleted.");
+    await loadProducts();
+  }
+
+  document.getElementById("refreshButton").addEventListener(
+    "click", loadProducts
+  );
+
+  document.getElementById("logoutButton").addEventListener(
+    "click", async () => {
+      await db.auth.signOut();
+      currentSession = null;
+      showLogin();
+      dashboard.classList.add("hidden");
+      showMessage("You have logged out.");
+    }
+  );
+
+  startApp();
+</script>
+</body>
+</html>
